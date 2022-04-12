@@ -2,31 +2,47 @@ import 'dart:math';
 
 import 'package:bezlimit_test/ui/details_page.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class MainPage extends StatefulWidget {
-  const MainPage({Key? key}) : super(key: key);
-
-  @override
-  State<MainPage> createState() => _MainPageState();
-}
-
-class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
+class MainController extends GetxController
+    with GetSingleTickerProviderStateMixin {
+  final selectedBox = RxnInt(null)..obs;
+  final snackClosed = RxBool(true);
+  final tappedBox = 0.obs;
+  final int length = 8;
   late AnimationController animationController;
   late ScrollController verticalController;
   late ScrollController horizontalController;
-  final rowFlex = [7, 8, 6];
-  int? selectedBox;
-  bool closed = true;
 
   @override
-  void initState() {
-    super.initState();
+  void onInit() {
+    super.onInit();
     verticalController = ScrollController();
     horizontalController = ScrollController();
     animationController = AnimationController(
       vsync: this,
     );
+    verticalController.addListener(() {
+      animationController.value =
+          (Get.height - verticalController.position.pixels) / Get.height;
+      if (verticalController.position.pixels.floor() ==
+              (Get.height / 2.5).floor() &&
+          snackClosed.value == true) {
+        snackClosed.value = false;
+        Get.snackbar('Snack', 'message')
+            .future
+            .then((_) => snackClosed.value = true);
+      }
+    });
+    selectedBox.listen((v) {
+      if (v == null) return;
+      horizontalController.animateTo(
+        v * 116.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   @override
@@ -36,17 +52,22 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     horizontalController.dispose();
     super.dispose();
   }
+}
+
+class MainPage extends StatelessWidget {
+  const MainPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final anim =
-        Tween<double>(begin: 0, end: 2 * pi).animate(animationController);
+    MainController controller = Get.put(MainController());
+    final anim = Tween<double>(begin: 0, end: 2 * pi)
+        .animate(controller.animationController);
     final circle = AnimatedBuilder(
       animation: anim,
       child: SvgPicture.asset(
         'assets/images/circle.svg',
-        width: 300,
-        height: 300,
+        width: Get.width,
+        height: Get.width,
       ),
       builder: (_, child) {
         return Transform.rotate(
@@ -55,37 +76,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         );
       },
     );
-    final size = MediaQuery.of(context).size.height;
     return Scaffold(
       body: NotificationListener<ScrollNotification>(
         onNotification: (v) {
-          if (v.depth == 0) {
-            animationController.value = (size - v.metrics.pixels) / size;
-            if (v.metrics.pixels.floor() == (size / 2.5).floor() && closed == true) {
-              setState(() {
-                closed = false;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Snack')),
-              ).closed.then((value) => setState(() => closed = true));
-            }
-          }
           return true;
         },
         child: Stack(
           children: [
             Positioned(
-              top: -100,
-              left: -100,
+              top: -Get.width/3.5,
+              left: -Get.width/2.5,
               child: circle,
             ),
             SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
-              controller: verticalController,
+              controller: controller.verticalController,
               child: Column(
                 children: [
                   SizedBox(
-                    height: size / 2.5,
+                    height: Get.height / 2.5,
                   ),
                   Container(
                     decoration: BoxDecoration(
@@ -95,113 +104,123 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         topRight: Radius.circular(15),
                       ),
                     ),
-                    height: size,
+                    height: Get.height,
                     child: Column(
                       children: [
                         ...List.generate(
                           3,
                           (i) {
-                            return Flexible(
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                    left: 16.0, right: 16.0, top: 20.0),
-                                child: Row(
-                                  children: [
-                                    Flexible(
-                                      flex: rowFlex[i],
-                                      child: Container(
-                                        height: 40.0,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: const BorderRadius.all(
-                                            Radius.circular(50),
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color:
-                                                  Colors.grey.withOpacity(0.5),
-                                              spreadRadius: 1,
-                                              blurRadius: 3,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    Spacer(
-                                      flex: 9 - rowFlex[i],
-                                    )
-                                  ],
-                                ),
-                              ),
-                            );
+                            return RowWidget(index: i);
                           },
                         ),
                         const SizedBox(
                           height: 50,
                         ),
-                        Flexible(
-                          child: SingleChildScrollView(
-                            physics: const ClampingScrollPhysics(),
-                            scrollDirection: Axis.horizontal,
-                            controller: horizontalController,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                              child: Row(
-                                children: [
-                                  ...List.generate(
-                                    8,
-                                    (i) => Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: InkWell(
-                                        onTap: () async {
-                                          Navigator.of(context)
-                                              .push(
-                                            MaterialPageRoute(
-                                              builder: (_) => DetailsPage(
-                                                maxLength: 8,
-                                                currentIndex: i + 1,
-                                              ),
-                                            ),
-                                          )
-                                              .then(
-                                            (value) {
-                                              setState(() => selectedBox = value);
-                                              horizontalController.animateTo(
-                                                value * 116.0,
-                                                duration:
-                                                    const Duration(milliseconds: 500),
-                                                curve: Curves.easeOut,
-                                              );
-                                            },
-                                          );
-                                        },
-                                        child: Container(
-                                          height: 100,
-                                          width: 100,
-                                          decoration: BoxDecoration(
-                                            color: i == selectedBox ? Colors.red : Colors.white,
-                                            border:
-                                                Border.all(color: Colors.grey),
-                                            borderRadius: const BorderRadius.all(
-                                              Radius.circular(15),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        )
+                        HorizontalScrollWidget()
                       ],
                     ),
                   )
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HorizontalScrollWidget extends StatelessWidget {
+  final MainController controller = Get.find();
+
+  HorizontalScrollWidget({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Flexible(
+      child: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        scrollDirection: Axis.horizontal,
+        controller: controller.horizontalController,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Row(
+            children: [
+              ...List.generate(
+                controller.length,
+                (i) => Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: InkWell(
+                    onTap: () async {
+                      controller.tappedBox.value = i + 1;
+                      Get.to(() => DetailsPage());
+                    },
+                    child: Obx(
+                      () => Container(
+                        height: 100,
+                        width: 100,
+                        decoration: BoxDecoration(
+                          color: i == controller.selectedBox.value
+                              ? Colors.red
+                              : Colors.white,
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(15),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class RowWidget extends StatelessWidget {
+  final int flex;
+  static const flexList = [7, 8, 6];
+
+  RowWidget({
+    Key? key,
+    required int index,
+  })  : flex = flexList[index],
+        super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Flexible(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 20.0),
+        child: Row(
+          children: [
+            Flexible(
+              flex: flex,
+              child: Container(
+                height: 40.0,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.all(
+                    Radius.circular(50),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.5),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Spacer(
+              flex: 9 - flex,
+            )
           ],
         ),
       ),
